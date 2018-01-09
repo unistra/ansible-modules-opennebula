@@ -122,8 +122,6 @@ def xmlrpc(client, method, *args):
     status, stdout, errcode = getattr(client.one, method)(*args)
     if not status:
         raise OneError('{:d}: {:s}'.format(errcode, stdout))
-    #print(stdout)
-    open('/tmp/output.xml', 'w').write(stdout)
     return stdout
 
 def get_vm_info(client, session, name):
@@ -153,6 +151,13 @@ def gen_template(params):
         graphics_params[-1] = graphics_params[-1][:-1]
         graphics_params.append(']')
         template_params.extend(graphics_params)
+    if 'ssh_keys' in params:
+        template_params.extend((
+            'CONTEXT = [',
+            '  SSH_PUBLIC_KEY = "{:s}"'.format('\n'.join(params['ssh_keys'])),
+            ']'
+        ))
+    print(params)
     return '\n'.join(template_params)
 
 def retrieve_vm(client, session, vm, _):
@@ -305,7 +310,8 @@ def main():
             'memory': dict(type='int', required=False, default=2048),
             'graphics': dict(type='dict', required=False, default={'type': 'vnc'}),
             'nics': dict(type='list', required=False),
-            'disks': dict(type='list', required=False)
+            'disks': dict(type='list', required=False),
+            'ssh_keys': dict(type='list', required=False)
         },
         supports_check_mode=True,
     )
