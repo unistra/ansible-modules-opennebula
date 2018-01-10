@@ -97,7 +97,9 @@ STATES = [
     'suspended',
     'resumed',
     'undeployed',
-    'retrieve']
+    'retrieve'
+]
+
 ONE_STATES_MAP = {
     '0': 'init',
     '1': 'pending',
@@ -157,7 +159,6 @@ def gen_template(params):
             '  SSH_PUBLIC_KEY = "{:s}"'.format('\n'.join(params['ssh_keys'])),
             ']'
         ))
-    print(params)
     return '\n'.join(template_params)
 
 def retrieve_vm(client, session, vm, _):
