@@ -145,7 +145,7 @@ def gen_template(params):
     template_params.append('MEMORY = "{:d}"'.format(params.get('memory', 2048)))
     template_params.extend('NIC = [ NETWORK_ID = "{:d}" ]'.format(int(nic_id))
                            for nic_id in params.get('nics', []))
-    if 'graphics' in params:
+    if params.get('graphics', {}):
         graphics_params = ['GRAPHICS = [']
         graphics_params.extend('  {:s} = "{:s}",'.format(param.upper(), value)
                               for param, value in params['graphics'].items())
