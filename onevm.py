@@ -143,7 +143,7 @@ def gen_template(params):
     template_params.append('CPU = "{:d}"'.format(params.get('cpu', 2)))
     template_params.append('VCPU = "{:d}"'.format(params.get('vcpu', 2)))
     template_params.append('MEMORY = "{:d}"'.format(params.get('memory', 2048)))
-    template_params.extend('NIC = [ NETWORK_ID = "{:d}" ]'.format(nic_id)
+    template_params.extend('NIC = [ NETWORK_ID = "{:d}" ]'.format(int(nic_id))
                            for nic_id in params.get('nics', []))
     if 'graphics' in params:
         graphics_params = ['GRAPHICS = [']
