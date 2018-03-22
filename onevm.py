@@ -73,6 +73,7 @@ options:
 
 import os
 import traceback
+import time
 
 try:
     from xmlrpc.client import ServerProxy
@@ -120,6 +121,7 @@ NOT_EXISTS_ERR = 'virtual machine does not exists!'
 class OneError(Exception):
     pass
 
+
 def xmlrpc(client, method, *args):
     status, stdout, errcode = getattr(client.one, method)(*args)
     if not status:
@@ -138,6 +140,7 @@ def get_vm_info(client, session, name):
         else (-1, None))
     return {'name': name, 'id': int(vm_id), 'state': vm_state}
 
+
 def gen_template(params):
     template_params = []
     template_params.append('CPU = "{:d}"'.format(params.get('cpu', 2)))
@@ -148,8 +151,8 @@ def gen_template(params):
     if params.get('graphics', {}):
         graphics_params = ['GRAPHICS = [']
         graphics_params.extend('  {:s} = "{:s}",'.format(param.upper(), value)
-                              for param, value in params['graphics'].items())
-        # Remove the comma on last element (as the template is invalid with it).
+                               for param, value in params['graphics'].items())
+        # Remove the comma on last element (as the template is invalid with it)
         graphics_params[-1] = graphics_params[-1][:-1]
         graphics_params.append(']')
         template_params.extend(graphics_params)
@@ -159,11 +162,18 @@ def gen_template(params):
             '  SSH_PUBLIC_KEY = "{:s}"'.format('\n'.join(params['ssh_keys'])),
             ']'
         ))
+    if 'list_disk' in params:
+        result = 'DISK = [ IMAGE = "' + params['IMAGE'] + '", ' +\
+                 'IMAGE_UNAME = "' + params['IMAGE_UNAME'] + '" ]'
+        for disk_id in params.get('list_disk', []):
+            result += 'DISK = [ IMAGE_ID = "' + str(disk_id) + '"]'
+        template_params.append(result)
     return '\n'.join(template_params)
+
 
 def retrieve_vm(client, session, vm, _):
     if vm['state'] is None:
-        return { 'failed': True, 'msg': NOT_EXISTS_ERR }
+        return {'failed': True, 'msg': NOT_EXISTS_ERR}
     xml = etree.fromstring(xmlrpc(client, 'vm.info', session, vm['id']))
     conf = {}
     for elt in ('uid', 'gid', 'uname', 'gname', 'state'):
@@ -177,14 +187,46 @@ def retrieve_vm(client, session, vm, _):
     conf['ips'] = [ip.text for ip in ips]
     return { 'changed': False, 'vm_id': vm['id'], 'conf': conf }
 
+
 def create_vm(client, session, vm, params):
     """If virtual machine does not exists, it is created in 'hold' state while
-    nothing is done if the virtual machine already exists."""
+    nothing is done if the virtual machine already exists.
+       We attack disk only at creation"""
+
     if vm['state'] is not None:
-        return { 'changed': False, 'vm_id': vm['id'], 'actions': [] }
+        return {'changed': False, 'vm_id': vm['id'], 'actions': []}
+
+    counter = 1
+    if params['disks']:
+        result = xmlrpc(client, 'template.info', session,
+                        params['template_id'], False)
+        tpl_info = etree.fromstring(result)
+        img = tpl_info.find("TEMPLATE").find("DISK").find("IMAGE").text
+        img_uname = tpl_info.find("TEMPLATE").find("DISK").find("IMAGE_UNAME").text
+        params['IMAGE'] = img
+        params['IMAGE_UNAME'] = img_uname
+        list_disk = []
+        for disk_size in params['disks']:
+            # Creation du disque.
+            template = "NAME=" + params['name'].split('.')[0] +\
+                       "-data" + str(counter) + "\n"
+            template += "PERSISTENT=YES\n"
+            template += "DRIVER=raw\n"
+            template += "SIZE=" + str(disk_size) + "\n"
+            template += "TYPE=DATABLOCK\nDRIVER=raw"
+            disk_id = xmlrpc(
+                client,
+                'image.allocate',
+                session,
+                template,
+                101
+            )
+            counter = counter + 1
+            list_disk.append(disk_id)
+        params['list_disk'] = list_disk
 
     template_id = params.pop('template_id', None)
-    stdout = xmlrpc(
+    vm_id = xmlrpc(
         client,
         'template.instantiate',
         session,
@@ -194,14 +236,16 @@ def create_vm(client, session, vm, params):
         gen_template(params),
         False
     )
-    return { 'changed': True, 'vm_id': int(stdout), 'actions': ['created']}
+    return {'changed': True, 'vm_id': int(vm_id), 'actions': ['created']}
+
 
 def delete_vm(client, session, vm, params):
     """Delete (ie: terminate) a virtual machine."""
     if vm['state'] is None:
-        return { 'changed': False }
+        return {'changed': False}
     xmlrpc(client, 'vm.action', session, 'terminate', vm['id'])
-    return { 'changed': True, 'vm_id': -1, 'actions': ['terminated'] }
+    return {'changed': True, 'vm_id': -1, 'actions': ['terminated']}
+
 
 def start_vm(client, session, vm, params):
     """Start a virtual machine. The virtual machine is created if it does not exists."""
@@ -274,7 +318,7 @@ def core(module):
     endpoint = module.params.pop('endpoint')
     session = '{:s}:{:s}'.format(module.params.pop('user'), module.params.pop('password'))
     state = module.params.pop('state')
-    name = module.params.pop('name')
+    name = module.params['name']
 
     if state in ('present', 'started') and module.params['template_id'] is None:
         return { 'failed': True, 'msg': 'missing required argument: template_id' }
@@ -296,6 +340,7 @@ def core(module):
     except OneError as err:
         return { 'failed': True, 'msg': to_native(err) }
     return { 'changed': False }
+
 
 def main():
     module = AnsibleModule(

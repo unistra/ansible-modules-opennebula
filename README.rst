@@ -27,7 +27,8 @@ Examples
       },
       state: present
 
-* Make sure a VM exists and is started:
+* Make sure a VM exists and is started with
+  1 additionnal disk, size are in MB and will appear as /dev/vdb device:
 
 .. code::
 
@@ -46,6 +47,7 @@ Examples
         keymap: fr
       },
       state: present
+      disks: [100000]
 
 * Remove (terminate) a VM:
 
