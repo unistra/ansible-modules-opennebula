@@ -63,6 +63,12 @@ options:
   nics:
     description:
       - List of networks ids.
+  ips:
+    description:
+      - Allows to force the IP of the configured interfaces ('nics' parameter).
+        When set, IP of each interface must be set. If for an interface you
+        still want to relay on your configured IPAM, you need to explicitly
+        set None value.
   graphics:
     description:
       - Allow to active either VNC or Spice for accessing virtual machine console.
@@ -156,8 +162,23 @@ def gen_template(params):
     template_params.append('CPU = "{:d}"'.format(params.get('cpu', 2)))
     template_params.append('VCPU = "{:d}"'.format(params.get('vcpu', 2)))
     template_params.append('MEMORY = "{:d}"'.format(params.get('memory', 2048)))
-    template_params.extend('NIC = [ NETWORK_ID = "{:d}" ]'.format(int(nic_id))
-                           for nic_id in params.get('nics', []))
+
+    ips = params['ips']
+    for idx, nic_id in enumerate(params.get('nics', [])):
+        nic_params = ['NIC = [']
+        try:
+            nic_ip = ips[idx]
+        except IndexError:
+            nic_ip = None
+
+        nic_params.append('  NETWORK_ID = "{}",'.format(nic_id))
+        if nic_ip:
+            nic_params.append('  IP = "{}",'.format(nic_ip))
+        # Remove the comma on last element (as the template is invalid with it)
+        nic_params[-1] = nic_params[-1][:-1]
+        nic_params.append(']')
+        template_params.extend(nic_params)
+
     if params.get('graphics', {}):
         graphics_params = ['GRAPHICS = [']
         graphics_params.extend('  {:s} = "{:s}",'.format(param.upper(), value)
@@ -335,6 +356,8 @@ def core(module):
 
     if state in ('present', 'started') and module.params['template_id'] is None:
         return { 'failed': True, 'msg': 'missing required argument: template_id' }
+    if module.params['ips'] and len(module.params['ips']) != len(module.params['nics']):
+        return { 'failed': True, 'msg': "when defined, 'ips' must have the size as 'nics'" }
 
     try:
         client = ServerProxy(endpoint)
@@ -368,7 +391,8 @@ def main():
             'vcpu': dict(type='int', required=False, default=2),
             'memory': dict(type='int', required=False, default=2048),
             'graphics': dict(type='dict', required=False, default={'type': 'vnc'}),
-            'nics': dict(type='list', required=False),
+            'nics': dict(type='list', required=False, default=[]),
+            'ips': dict(type='list', required=False, default=[]),
             'disks': dict(type='list', required=False, default=[]),
             'ssh_keys': dict(type='list', required=False)
         },
