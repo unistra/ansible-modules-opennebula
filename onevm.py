@@ -68,7 +68,9 @@ options:
       - Allow to active either VNC or Spice for accessing virtual machine console.
   disks:
     description:
-      - Additionnal disks. The format is: .
+      - List of sizes of additional disks. The name of the created disk is the
+        name of the new instance suffix by '-dataN' where N is the disk index in
+        the list.
 """
 
 import os
@@ -140,6 +142,14 @@ def get_vm_info(client, session, name):
         else (-1, None))
     return {'name': name, 'id': int(vm_id), 'state': vm_state}
 
+def get_template_infos(client, session, template_id):
+    xml = etree.fromstring(xmlrpc(client, 'template.info', session, template_id, False))
+    return {
+        'disk': {
+            'image': xml.xpath("/VMTEMPLATE/TEMPLATE/DISK/IMAGE")[0].text,
+            'image_uname': xml.xpath("/VMTEMPLATE/TEMPLATE/DISK/IMAGE_UNAME")[0].text
+        }
+    }
 
 def gen_template(params):
     template_params = []
@@ -162,14 +172,18 @@ def gen_template(params):
             '  SSH_PUBLIC_KEY = "{:s}"'.format('\n'.join(params['ssh_keys'])),
             ']'
         ))
-    if 'list_disk' in params:
-        result = 'DISK = [ IMAGE = "' + params['IMAGE'] + '", ' +\
-                 'IMAGE_UNAME = "' + params['IMAGE_UNAME'] + '" ]'
-        for disk_id in params.get('list_disk', []):
-            result += 'DISK = [ IMAGE_ID = "' + str(disk_id) + '"]'
-        template_params.append(result)
-    return '\n'.join(template_params)
 
+    if params['disks']:
+        for disk in params['disks']:
+            disk_params = ['DISK = [']
+            disk_params.extend('  {:s} = "{:s}",'.format(param.upper(), str(value))
+                               for param, value in disk.items())
+            # Remove the comma on last element (as the template is invalid with it)
+            disk_params[-1] = disk_params[-1][:-1]
+            disk_params.append(']')
+            template_params.extend(disk_params)
+
+    return '\n'.join(template_params)
 
 def retrieve_vm(client, session, vm, _):
     if vm['state'] is None:
@@ -187,45 +201,44 @@ def retrieve_vm(client, session, vm, _):
     conf['ips'] = [ip.text for ip in ips]
     return { 'changed': False, 'vm_id': vm['id'], 'conf': conf }
 
+def create_image(client, session, name, size):
+    template = '\n'.join(
+        '{:s}={:s}'.format(param.upper(), str(value))
+        for param, value in {
+            'name': name,
+            'persistent': 'yes',
+            'driver': 'raw',
+            'size': str(size),
+            'type': 'datablock',
+            'driver': 'raw'
+        }.items()
+    )
+    return xmlrpc(client, 'image.allocate', session, template, 101)
 
 def create_vm(client, session, vm, params):
     """If virtual machine does not exists, it is created in 'hold' state while
-    nothing is done if the virtual machine already exists.
-       We attack disk only at creation"""
-
+    nothing is done if the virtual machine already exists."""
     if vm['state'] is not None:
         return {'changed': False, 'vm_id': vm['id'], 'actions': []}
 
-    counter = 1
-    if params['disks']:
-        result = xmlrpc(client, 'template.info', session,
-                        params['template_id'], False)
-        tpl_info = etree.fromstring(result)
-        img = tpl_info.find("TEMPLATE").find("DISK").find("IMAGE").text
-        img_uname = tpl_info.find("TEMPLATE").find("DISK").find("IMAGE_UNAME").text
-        params['IMAGE'] = img
-        params['IMAGE_UNAME'] = img_uname
-        list_disk = []
-        for disk_size in params['disks']:
-            # Creation du disque.
-            template = "NAME=" + params['name'].split('.')[0] +\
-                       "-data" + str(counter) + "\n"
-            template += "PERSISTENT=YES\n"
-            template += "DRIVER=raw\n"
-            template += "SIZE=" + str(disk_size) + "\n"
-            template += "TYPE=DATABLOCK\nDRIVER=raw"
-            disk_id = xmlrpc(
-                client,
-                'image.allocate',
-                session,
-                template,
-                101
-            )
-            counter = counter + 1
-            list_disk.append(disk_id)
-        params['list_disk'] = list_disk
-
     template_id = params.pop('template_id', None)
+    template_infos = get_template_infos(client, session, template_id)
+
+    # Manage additional disks (which are created).
+    if params['disks']:
+        # When setting additional disks, the template disk need to be redefined.
+        disks = [template_infos['disk']]
+
+        # Create additional images and add to disks
+        for idx, disk_size in enumerate(params['disks']):
+            disk_name = "{:s}-data{:d}".format(params['name'], idx + 1)
+            disks.append(
+                {'image_id': create_image(client, session, disk_name, disk_size)}
+            )
+
+        # Replace input disks params by the generated disks.
+        params['disks'] = disks
+
     vm_id = xmlrpc(
         client,
         'template.instantiate',
@@ -356,7 +369,7 @@ def main():
             'memory': dict(type='int', required=False, default=2048),
             'graphics': dict(type='dict', required=False, default={'type': 'vnc'}),
             'nics': dict(type='list', required=False),
-            'disks': dict(type='list', required=False),
+            'disks': dict(type='list', required=False, default=[]),
             'ssh_keys': dict(type='list', required=False)
         },
         supports_check_mode=True,
