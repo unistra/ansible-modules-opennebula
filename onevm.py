@@ -150,12 +150,18 @@ def get_vm_info(client, session, name):
 
 def get_template_infos(client, session, template_id):
     xml = etree.fromstring(xmlrpc(client, 'template.info', session, template_id, False))
-    return {
+    template = {
         'disk': {
             'image': xml.xpath("/VMTEMPLATE/TEMPLATE/DISK/IMAGE")[0].text,
             'image_uname': xml.xpath("/VMTEMPLATE/TEMPLATE/DISK/IMAGE_UNAME")[0].text
         }
     }
+    template_keys = xml.xpath("/VMTEMPLATE/TEMPLATE/CONTEXT/SSH_PUBLIC_KEY")
+    if template_keys:
+        template.update(
+            ssh_keys=template_keys[0].text.split('\n')
+        )
+    return template
 
 def gen_template(params):
     template_params = []
@@ -179,7 +185,7 @@ def gen_template(params):
         nic_params.append(']')
         template_params.extend(nic_params)
 
-    if params.get('graphics', {}):
+    if params['graphics']:
         graphics_params = ['GRAPHICS = [']
         graphics_params.extend('  {:s} = "{:s}",'.format(param.upper(), value)
                                for param, value in params['graphics'].items())
@@ -187,7 +193,8 @@ def gen_template(params):
         graphics_params[-1] = graphics_params[-1][:-1]
         graphics_params.append(']')
         template_params.extend(graphics_params)
-    if 'ssh_keys' in params:
+
+    if params['ssh_keys']:
         template_params.extend((
             'CONTEXT = [',
             '  SSH_PUBLIC_KEY = "{:s}"'.format('\n'.join(params['ssh_keys'])),
@@ -260,6 +267,9 @@ def create_vm(client, session, vm, params):
         # Replace input disks params by the generated disks.
         params['disks'] = disks
 
+    # Add ssh keys defined in the template.
+    params['ssh_keys'].extend(template_infos.get('ssh_keys', []))
+
     vm_id = xmlrpc(
         client,
         'template.instantiate',
@@ -272,14 +282,12 @@ def create_vm(client, session, vm, params):
     )
     return {'changed': True, 'vm_id': int(vm_id), 'actions': ['created']}
 
-
 def delete_vm(client, session, vm, params):
     """Delete (ie: terminate) a virtual machine."""
     if vm['state'] is None:
         return {'changed': False}
     xmlrpc(client, 'vm.action', session, 'terminate', vm['id'])
     return {'changed': True, 'vm_id': -1, 'actions': ['terminated']}
-
 
 def start_vm(client, session, vm, params):
     """Start a virtual machine. The virtual machine is created if it does not exists."""
@@ -348,6 +356,7 @@ def undeploy_vm(client, session, vm, params):
     return { 'changed': True, 'vm_id': vm['id'], 'actions': ['undeployed'] }
 
 def core(module):
+    """Core function that distribute actions based on module parameters."""
     # Required parameters.
     endpoint = module.params.pop('endpoint')
     session = '{:s}:{:s}'.format(module.params.pop('user'), module.params.pop('password'))
@@ -394,7 +403,7 @@ def main():
             'nics': dict(type='list', required=False, default=[]),
             'ips': dict(type='list', required=False, default=[]),
             'disks': dict(type='list', required=False, default=[]),
-            'ssh_keys': dict(type='list', required=False)
+            'ssh_keys': dict(type='list', required=False, default=[])
         },
         supports_check_mode=True,
     )
