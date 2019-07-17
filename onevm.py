@@ -159,7 +159,7 @@ def get_size(value):
         raise OneError('invalid size: {:s}'.format(value))
 
 def xmlrpc(client, method, *args):
-    status, stdout, errcode = getattr(client.one, method)(*args)
+    status, stdout, errcode = getattr(client.one, method)(*args)[:3]
     if not status:
         raise OneError('{:d}: {:s}'.format(errcode, stdout))
     return stdout
