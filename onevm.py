@@ -73,6 +73,9 @@ options:
   graphics:
     description:
       - Allow to active either VNC or Spice for accessing virtual machine console.
+  disk_size:
+    description:
+      - Size of the main disk (exemple: 50g).
   disks:
     description:
       - List of sizes of additional disks. The name of the created disk is the
@@ -276,10 +279,13 @@ def create_vm(client, session, vm, params):
     template_id = params.pop('template_id', None)
     template_infos = get_template_infos(client, session, template_id)
 
+    disks = [template_infos['disk']]
+    if params['disk_size']:
+        disks[0].setdefault('SIZE', get_size(params['disk_size']))
+
     # Manage additional disks (which are created).
     if params['disks']:
         # When setting additional disks, the template disk need to be redefined.
-        disks = [template_infos['disk']]
 
         # Create additional images and add to disks
         for idx, disk_size in enumerate(params['disks']):
@@ -288,8 +294,8 @@ def create_vm(client, session, vm, params):
                 {'image_id': create_image(client, session, disk_name, disk_size)}
             )
 
-        # Replace input disks params by the generated disks.
-        params['disks'] = disks
+    # Replace input disks params by the generated disks.
+    params['disks'] = disks
 
     # Add ssh keys defined in the template.
     params['ssh_keys'].extend(template_infos.get('ssh_keys', []))
@@ -426,6 +432,7 @@ def main():
             'graphics': dict(type='dict', required=False, default={'type': 'vnc'}),
             'nics': dict(type='list', required=False, default=[]),
             'ips': dict(type='list', required=False, default=[]),
+            'disk_size': dict(type='str', required=False),
             'disks': dict(type='list', required=False, default=[]),
             'ssh_keys': dict(type='list', required=False, default=[])
         },
