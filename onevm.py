@@ -59,7 +59,8 @@ options:
       - Number of vCPU.
   memory:
     description:
-      - Memory in Mb.
+      - Memory to allocate (exemple: 2g). Valid units are (case insensitive): m,
+        g, t. If no unit is given, the value is considered to be in Mb.
   nics:
     description:
       - List of networks ids.
@@ -80,6 +81,7 @@ options:
 """
 
 import os
+import re
 import traceback
 import time
 
@@ -123,12 +125,34 @@ ONE_STATES_MAP = {
     '11': 'cloning_failure'
 }
 
+SIZE_UNITS = ['m', 'g', 't']
+
 #FIND_VM = "/VM_POOL/VM[NAME='{name:s}']/NAME | /VM_POOL/VM[NAME='{name:s}']/ID"
 NOT_EXISTS_ERR = 'virtual machine does not exists!'
 
 class OneError(Exception):
     pass
 
+def get_size(value):
+    value = str(value)
+
+    try:
+        size, unit = re.search('^(\d*)(\w)?$', value).groups()
+        size = int(size)
+
+        if unit is None:
+            return size
+        if unit.lower() not in SIZE_UNITS:
+            raise OneError("invalid size unit: {:s}".format(value))
+
+        size = int(size)
+        return {
+            'm': size,
+            'g': size * 1024,
+            't': size * 1024 * 1024
+        }.get(unit.lower(), size)
+    except AttributeError:
+        raise OneError('invalid size: {:s}'.format(value))
 
 def xmlrpc(client, method, *args):
     status, stdout, errcode = getattr(client.one, method)(*args)
@@ -165,9 +189,9 @@ def get_template_infos(client, session, template_id):
 
 def gen_template(params):
     template_params = []
-    template_params.append('CPU = "{:d}"'.format(params.get('cpu', 2)))
-    template_params.append('VCPU = "{:d}"'.format(params.get('vcpu', 2)))
-    template_params.append('MEMORY = "{:d}"'.format(params.get('memory', 2048)))
+    template_params.append('CPU = "{:d}"'.format(params['cpu']))
+    template_params.append('VCPU = "{:d}"'.format(params['vcpu']))
+    template_params.append('MEMORY = "{:d}"'.format(get_size(params['memory'])))
 
     ips = params['ips']
     for idx, nic_id in enumerate(params.get('nics', [])):
@@ -398,7 +422,7 @@ def main():
             'template_id': dict(type='int', required=False),
             'cpu': dict(type='int', required=False, default=2),
             'vcpu': dict(type='int', required=False, default=2),
-            'memory': dict(type='int', required=False, default=2048),
+            'memory': dict(type='str', required=False, default='2g'),
             'graphics': dict(type='dict', required=False, default={'type': 'vnc'}),
             'nics': dict(type='list', required=False, default=[]),
             'ips': dict(type='list', required=False, default=[]),
