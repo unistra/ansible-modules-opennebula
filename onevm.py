@@ -78,9 +78,10 @@ options:
       - Size of the main disk (exemple: 50g).
   disks:
     description:
-      - List of sizes of additional disks. The name of the created disk is the
-        name of the new instance suffix by '-dataN' where N is the disk index in
-        the list.
+      - List of additionals disks. Each disk is a hash containing the parameters
+        of the disk: 'size', 'datastore_id' and 'name' (optionally otherwise
+        generated from the machine name by suffixing '-dataN' where N is the
+        disk number).
 """
 
 import os
@@ -256,19 +257,19 @@ def retrieve_vm(client, session, vm, _):
     conf['ips'] = [ip.text for ip in ips]
     return { 'changed': False, 'vm_id': vm['id'], 'conf': conf }
 
-def create_image(client, session, name, size):
+def create_image(client, session, name, size, datastore_id):
     template = '\n'.join(
         '{:s}={:s}'.format(param.upper(), str(value))
         for param, value in {
             'name': name,
             'persistent': 'yes',
             'driver': 'raw',
-            'size': str(size),
+            'size': get_size(size),
             'type': 'datablock',
             'driver': 'raw'
         }.items()
     )
-    return xmlrpc(client, 'image.allocate', session, template, 101)
+    return xmlrpc(client, 'image.allocate', session, template, int(datastore_id))
 
 def create_vm(client, session, vm, params):
     """If virtual machine does not exists, it is created in 'hold' state while
@@ -288,10 +289,26 @@ def create_vm(client, session, vm, params):
         # When setting additional disks, the template disk need to be redefined.
 
         # Create additional images and add to disks
-        for idx, disk_size in enumerate(params['disks']):
-            disk_name = "{:s}-data{:d}".format(params['name'], idx + 1)
+        for idx, disk in enumerate(params['disks']):
+            if not isinstance(disk, dict):
+                raise OneError("invalid disk: {}".format(disk))
+
+            disk_name = disk.pop('name', "{:s}-data{:d}".format(params['name'], idx + 1))
+
+            for param in ('size', 'datastore_id'):
+                if param not in disk:
+                    raise OneError("missing parameter: {:s}".format(param))
+
             disks.append(
-                {'image_id': create_image(client, session, disk_name, disk_size)}
+                {
+                    'image_id': create_image(
+                        client,
+                        session,
+                        disk_name,
+                        disk['size'],
+                        disk['datastore_id']
+                    )
+                }
             )
 
     # Replace input disks params by the generated disks.
