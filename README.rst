@@ -7,57 +7,57 @@ This repository contains a basic module for managing OpenNebula virtuals machine
 Examples
 ========
 
-* Make sure a VM exists (in *hold* state):
+* Ensure a VM exists but is not started (in *hold* state):
 
 .. code::
 
     onevm:
-      endpoint: "https://one.unistra.fr:2633/RPC2"
-      user: YOUR_USER
-      password: YOUR_PASSWORD
-      name: es2-mon1
-      template_id: 45 # template centos7-infra
+      endpoint: "https://one.exemple.com:2633/RPC2"
+      user: <USER>
+      password: <PASSWORD>
+      name: <NAME>
+      template_id: 1
       cpu: 2
       vcpu: 2
-      memory: 8192
-      nics: [11, 8] # BDD and SAN networks
+      memory: 8g
+      nics: [1, 2]
       graphics: {
         type: vnc,
         keymap: fr
       },
       state: present
 
-* Make sure a VM exists and is started with
-  1 additionnal disk, size are in MB and will appear as /dev/vdb device:
+* Ensure a VM exists and is started with one additionnal disk of 100G:
 
 .. code::
 
     onevm:
-      endpoint: "https://one.unistra.fr:2633/RPC2"
-      user: YOUR_USER
-      password: YOUR_PASSWORD
-      name: es2-mon1
-      template_id: 45 # template centos7-infra
+      endpoint: "https://one.exemple.com:2633/RPC2"
+      user: <USER>
+      password: <PASSWORD>
+      name: <NAME>
+      template_id: 1
       cpu: 2
       vcpu: 2
       memory: 8192
-      nics: [11, 8] # BDD and SAN networks
+      nics: [1, 2]
       graphics: {
         type: vnc,
         keymap: fr
       },
       state: present
-      disks: [100000]
+      disks:
+      - { size: 100g, datastore_id: <DATASTORE_ID> }
 
 * Remove (terminate) a VM:
 
 .. code::
 
     onevm:
-      endpoint: "https://one.unistra.fr:2633/RPC2"
-      user: YOUR_USER
-      password: YOUR_PASSWORD
-      name: es2-mon1
+      endpoint: "https://one.exemple.com:2633/RPC2"
+      user: <USER>
+      password: <PASSWORD>
+      name: <NAME>
       state: absent
 
 * Stop a VM:
@@ -65,10 +65,10 @@ Examples
 .. code::
 
     onevm:
-      endpoint: "https://one.unistra.fr:2633/RPC2"
-      user: YOUR_USER
-      password: YOUR_PASSWORD
-      name: es2-mon1
+      endpoint: "https://one.exemple.com:2633/RPC2"
+      user: <USER>
+      password: <PASSWORD>
+      name: <NAME>
       state: stopped
 
 * Suspend a VM:
@@ -76,10 +76,10 @@ Examples
 .. code::
 
     onevm:
-      endpoint: "https://one.unistra.fr:2633/RPC2"
-      user: YOUR_USER
-      password: YOUR_PASSWORD
-      name: es2-mon1
+      endpoint: "https://one.exemple.com:2633/RPC2"
+      user: <USER>
+      password: <PASSWORD>
+      name: <NAME>
       state: suspended
 
 * Resume a VM:
@@ -87,10 +87,10 @@ Examples
 .. code::
 
     onevm:
-      endpoint: "https://one.unistra.fr:2633/RPC2"
-      user: YOUR_USER
-      password: YOUR_PASSWORD
-      name: es2-mon1
+      endpoint: "https://one.exemple.com:2633/RPC2"
+      user: <USER>
+      password: <PASSWORD>
+      name: <NAME>
       state: resumed
 
 * Undeploy a VM:
@@ -98,8 +98,8 @@ Examples
 .. code::
 
     onevm:
-      endpoint: "https://one.unistra.fr:2633/RPC2"
-      user: YOUR_USER
-      password: YOUR_PASSWORD
-      name: es2-mon1
+      endpoint: "https://one.exemple.com:2633/RPC2"
+      user: <USER>
+      password: <PASSWORD>
+      name: <NAME>
       state: undeployed
