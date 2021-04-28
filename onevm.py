@@ -196,6 +196,12 @@ def gen_template(params):
     template_params.append('CPU = "{:d}"'.format(params['cpu']))
     template_params.append('VCPU = "{:d}"'.format(params['vcpu']))
     template_params.append('MEMORY = "{:d}"'.format(get_size(params['memory'])))
+    if params['cpu_model']:
+      template_params.append('''
+        CPU_MODEL = [
+          MODEL = "{:s}"
+        ]
+      '''.format(params['cpu_model']))
 
     ips = params['ips']
     for idx, nic_id in enumerate(params.get('nics', [])):
@@ -444,6 +450,7 @@ def main():
             'name': dict(type='str', required=True),
             'template_id': dict(type='int', required=False),
             'cpu': dict(type='int', required=False, default=2),
+            'cpu_model': dict(type='str', required=False),
             'vcpu': dict(type='int', required=False, default=2),
             'memory': dict(type='str', required=False, default='2g'),
             'graphics': dict(type='dict', required=False, default={'type': 'vnc'}),
